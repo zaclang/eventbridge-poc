@@ -1,0 +1,86 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: eventBridgePocApp
+
+Globals:
+  Function:
+    Timeout: 3
+
+Resources:
+  producerFn:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: producer/
+      Handler: index.handler
+      Runtime: nodejs12.x
+      Policies:
+        - Statement:
+          - Effect: Allow
+            Resource: '*'
+            Action:
+              - events:PutEvents
+
+  fooConsumerFn:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: consumer-foo/
+      Handler: index.handler
+      Runtime: nodejs12.x
+
+  barConsumerFn:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: consumer-bar/
+      Handler: index.handler
+      Runtime: nodejs12.x
+      Events:
+        Trigger:
+          Type: CloudWatchEvent
+          Properties:
+            Pattern:
+              source:
+                - custom.eventBridgePocApp
+              # detail-type:
+              #   - transaction
+              # detail:
+              #   location:
+              #     - "prefix": "NY-"
+
+  EventRule1:
+    Type: AWS::Events::Rule
+    Properties:
+      Description: "New Request"
+      EventPattern:
+        source:
+          - "custom.eventBridgePocApp"
+      #   detail-type:
+      #     - transaction
+      #   detail:
+      #     result:
+      #       - "approved"
+      # State: "ENABLED"
+      Targets:
+        -
+          Arn:
+            Fn::GetAtt:
+              - "fooConsumerFn"
+              - "Arn"
+          Id: "fooConsumerTarget1"
+        -
+          Arn:
+            Fn::GetAtt:
+              - "barConsumerFn"
+              - "Arn"
+          Id: "barConsumerTarget1"
+
+  PermissionForEventsToInvokeLambda:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName:
+        Ref: "fooConsumerFn"
+      Action: "lambda:InvokeFunction"
+      Principal: "events.amazonaws.com"
+      SourceArn:
+        Fn::GetAtt:
+          - "EventRule1"
+          - "Arn"
